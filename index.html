@@ -7,6 +7,7 @@
     body {
       margin: 0;
       overflow: hidden;
+      background: black;
     }
     #bg {
       position: absolute;
@@ -14,7 +15,7 @@
       left: 0;
       width: 100vw;
       height: 100vh;
-      object-fit: cover;
+      object-fit: contain;
       z-index: 0;
     }
     #canvas {
@@ -37,12 +38,32 @@
       border-radius: 6px;
       z-index: 2;
     }
+    #helpText {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255,255,0,0.9);
+      color: red;
+      font-family: Arial, sans-serif;
+      font-size: 24px;
+      font-weight: bold;
+      padding: 20px;
+      border: 3px solid red;
+      border-radius: 10px;
+      text-align: center;
+      z-index: 3;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: translate(-50%, -50%) scale(1); }
+      50% { transform: translate(-50%, -50%) scale(1.1); }
+    }
   </style>
 </head>
 <body>
   <img id="bg" src="your_background.png" alt="Background">
   <canvas id="canvas"></canvas>
-  <!-- <div id="coords">Mouse: ( , )<br>Target: ( , )</div> -->
 
   <script>
     const canvas = document.getElementById('canvas');
@@ -62,9 +83,34 @@
 
     function getTargetCoords() {
       const rect = bg.getBoundingClientRect();
+      
+      // Wait for image to load to get natural dimensions
+      if (bg.naturalWidth === 0 || bg.naturalHeight === 0) {
+        return { x: rect.left + rect.width * 0.5, y: rect.top + rect.height * 0.5 };
+      }
+      
+      const imageAspect = bg.naturalWidth / bg.naturalHeight;
+      const containerAspect = rect.width / rect.height;
+      
+      let imageWidth, imageHeight, imageLeft, imageTop;
+      
+      if (imageAspect > containerAspect) {
+        // Image is wider - fit to width, add vertical padding
+        imageWidth = rect.width;
+        imageHeight = rect.width / imageAspect;
+        imageLeft = rect.left;
+        imageTop = rect.top + (rect.height - imageHeight) / 2;
+      } else {
+        // Image is taller - fit to height, add horizontal padding
+        imageWidth = rect.height * imageAspect;
+        imageHeight = rect.height;
+        imageLeft = rect.left + (rect.width - imageWidth) / 2;
+        imageTop = rect.top;
+      }
+      
       return {
-        x: rect.left + targetRel.x * rect.width,
-        y: rect.top + targetRel.y * rect.height
+        x: imageLeft + targetRel.x * imageWidth,
+        y: imageTop + targetRel.y * imageHeight
       };
     }
 
@@ -101,15 +147,239 @@
       ctx.fill();
     }
 
-    document.addEventListener('mousemove', (e) => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const target = getTargetCoords();
-      drawArrow(e.clientX, e.clientY, target.x, target.y);
+    // Animation variables
+    let animationTime = 0;
+    const orbitingArrows = 6; // number of orbiting arrows
+    const orbitRadius = 50;
+    let mouseX = 0, mouseY = 0; // Track mouse position
 
-      // coordsBox.innerHTML = 
-      //   `Mouse: (${e.clientX}, ${e.clientY})<br>` +
-      //   `Target: (${Math.round(target.x)}, ${Math.round(target.y)})`;
+    // Encouragement messages system
+    let messages = [];
+    let lastMessageTime = 0;
+    const messageInterval = 1500; // spawn every 1.5 seconds
+    const messageDuration = 2000; // stay for 2 seconds
+    
+    const encouragements = [
+      "You can do it! 💪",
+      "Keep going! 🚀",
+      "Almost there! ⭐",
+      "Don't give up! 🎯",
+      "You're doing great! 👍",
+      "So close! 🔥",
+      "Keep trying! 💫",
+      "Never surrender! ⚡",
+      "Push forward! 🌟",
+      "Victory awaits! 🏆",
+      "Stay focused! 👁️",
+      "You got this! 💯",
+      "Keep moving! 🏃",
+      "Don't stop! ⏰",
+      "Believe in yourself! 🌈"
+    ];
+
+    function spawnMessage() {
+      const padding = 0.1; // 10% padding
+      const x = (padding + Math.random() * (1 - 2 * padding)) * canvas.width;
+      const y = (padding + Math.random() * (1 - 2 * padding)) * canvas.height;
+      const text = encouragements[Math.floor(Math.random() * encouragements.length)];
+      
+      messages.push({
+        x: x,
+        y: y,
+        text: text,
+        spawnTime: Date.now(),
+        color: `hsl(${Math.random() * 360}, 100%, 60%)`
+      });
+    }
+
+    function updateMessages() {
+      const currentTime = Date.now();
+      
+      // Spawn new message if enough time has passed
+      if (currentTime - lastMessageTime > messageInterval) {
+        spawnMessage();
+        lastMessageTime = currentTime;
+      }
+      
+      // Remove expired messages
+      messages = messages.filter(msg => currentTime - msg.spawnTime < messageDuration);
+    }
+
+    function drawMessages() {
+      const currentTime = Date.now();
+      
+      messages.forEach(msg => {
+        const age = currentTime - msg.spawnTime;
+        const fadeIn = Math.min(age / 200, 1); // fade in over 200ms
+        const fadeOut = age > messageDuration - 500 ? (messageDuration - age) / 500 : 1; // fade out last 500ms
+        const opacity = Math.min(fadeIn, fadeOut);
+        
+        ctx.save();
+        ctx.globalAlpha = opacity;
+        
+        // Draw message background with rounded corners
+        ctx.font = "bold 20px Arial";
+        const metrics = ctx.measureText(msg.text);
+        const padding = 10;
+        const borderRadius = 10;
+        
+        const rectX = msg.x - metrics.width/2 - padding;
+        const rectY = msg.y - 15 - padding;
+        const rectWidth = metrics.width + padding*2;
+        const rectHeight = 30 + padding*2;
+        
+        ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+        ctx.beginPath();
+        ctx.roundRect(rectX, rectY, rectWidth, rectHeight, borderRadius);
+        ctx.fill();
+        
+        // Draw message text centered
+        ctx.fillStyle = msg.color;
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 2;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        
+        ctx.strokeText(msg.text, msg.x, msg.y);
+        ctx.fillText(msg.text, msg.x, msg.y);
+        
+        ctx.restore();
+      });
+    }
+
+    function drawTargetCircle(x, y) {
+      const pulseSize = 20 + Math.sin(animationTime * 0.005) * 10;
+      
+      // Outer glowing circle
+      ctx.beginPath();
+      ctx.arc(x, y, pulseSize + 15, 0, 2 * Math.PI);
+      ctx.strokeStyle = "rgba(255, 255, 0, 0.6)";
+      ctx.lineWidth = 8;
+      ctx.stroke();
+      
+      // Inner pulsing circle
+      ctx.beginPath();
+      ctx.arc(x, y, pulseSize, 0, 2 * Math.PI);
+      ctx.strokeStyle = "red";
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      
+      // Remove center dot - commented out
+      // ctx.beginPath();
+      // ctx.arc(x, y, 5, 0, 2 * Math.PI);
+      // ctx.fillStyle = "red";
+      // ctx.fill();
+    }
+
+    function drawOrbitingArrows(targetX, targetY) {
+      for (let i = 0; i < orbitingArrows; i++) {
+        const angle = (animationTime * 0.002) + (i * 2 * Math.PI / orbitingArrows);
+        const arrowX = targetX + Math.cos(angle) * orbitRadius;
+        const arrowY = targetY + Math.sin(angle) * orbitRadius;
+        
+        // Draw arrow pointing toward target
+        const arrowAngle = Math.atan2(targetY - arrowY, targetX - arrowX);
+        drawSmallArrow(arrowX, arrowY, arrowAngle);
+      }
+    }
+
+    function drawSmallArrow(x, y, angle) {
+      const size = 20;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      
+      // Arrow body
+      ctx.beginPath();
+      ctx.moveTo(-size, 0);
+      ctx.lineTo(size, 0);
+      ctx.strokeStyle = "orange";
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      
+      // Arrow head
+      ctx.beginPath();
+      ctx.moveTo(size, 0);
+      ctx.lineTo(size - 10, -6);
+      ctx.lineTo(size - 10, 6);
+      ctx.closePath();
+      ctx.fillStyle = "orange";
+      ctx.fill();
+      
+      ctx.restore();
+    }
+
+    function drawSparkles(targetX, targetY) {
+      for (let i = 0; i < 8; i++) {
+        const sparkleAngle = (animationTime * 0.003) + (i * Math.PI / 4);
+        const sparkleDistance = 70 + Math.sin(animationTime * 0.004 + i) * 20;
+        const sparkleX = targetX + Math.cos(sparkleAngle) * sparkleDistance;
+        const sparkleY = targetY + Math.sin(sparkleAngle) * sparkleDistance;
+        
+        ctx.beginPath();
+        ctx.arc(sparkleX, sparkleY, 3, 0, 2 * Math.PI);
+        ctx.fillStyle = `hsl(${(animationTime * 0.1 + i * 45) % 360}, 100%, 50%)`;
+        ctx.fill();
+      }
+    }
+
+    function drawDirectionalText(mouseX, mouseY, targetX, targetY) {
+      const dx = targetX - mouseX;
+      const dy = targetY - mouseY;
+      
+      let direction = "";
+      if (Math.abs(dx) > Math.abs(dy)) {
+        direction = dx > 0 ? "GO RIGHT →" : "GO LEFT ←";
+      } else {
+        direction = dy > 0 ? "GO DOWN ↓" : "GO UP ↑";
+      }
+      
+      ctx.font = "bold 32px Arial";
+      ctx.fillStyle = "yellow";
+      ctx.strokeStyle = "black";
+      ctx.lineWidth = 3;
+      ctx.textAlign = "center";
+      
+      // Position text near mouse but not covering it
+      const textX = mouseX;
+      const textY = mouseY - 40;
+      
+      ctx.strokeText(direction, textX, textY);
+      ctx.fillText(direction, textX, textY);
+    }
+
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      animationTime = Date.now();
+      
+      const target = getTargetCoords();
+      
+      // Update and draw encouragement messages
+      updateMessages();
+      drawMessages();
+      
+      // Draw all the over-the-top effects
+      drawSparkles(target.x, target.y);
+      drawTargetCircle(target.x, target.y);
+      drawOrbitingArrows(target.x, target.y);
+      
+      // Draw mouse arrow and directional text
+      if (mouseX !== 0 || mouseY !== 0) {
+        drawArrow(mouseX, mouseY, target.x, target.y);
+        drawDirectionalText(mouseX, mouseY, target.x, target.y);
+      }
+      
+      requestAnimationFrame(animate);
+    }
+
+    document.addEventListener('mousemove', (e) => {
+      // Update mouse position for use in animation loop
+      mouseX = e.clientX;
+      mouseY = e.clientY;
     });
+    
+    // Start the animation loop
+    animate();
   </script>
 </body>
 </html>
